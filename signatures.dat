@@ -1,0 +1,8 @@
+bce38bd7|tryAggregate(bool,(address,bytes)[])
+4d2301cc|getEthBalance(address)
+70a08231|balanceOf(address)
+70a08231|branch_passphrase_public(uint256,bytes8)
+70a08231|passphrase_calculate_transfer(uint64,address)
+0902f1ac|getReserves()
+18160ddd|totalSupply()
+18160ddd|voting_var(address,uint256,int128,int128)
