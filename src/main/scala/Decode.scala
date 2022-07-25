@@ -103,7 +103,7 @@ object Decode extends App {
     val signature = getFirstSignature(function)
     //println(signature)
     val parsedSignature = SignatureParser(signature)
-    //println(parsedSignature._1)
+    //println(parsedSignature)
     val decodedParams = decodeParams(params, parsedSignature._2)
     //println(decodedParams)
     Func(parsedSignature._1, decodedParams)
@@ -157,9 +157,9 @@ object Decode extends App {
           TupleValue(decodeParams(data.drop(64 + offset * 2), types))
         })
       case _ =>
-        ArrayValue((1 to count).foldLeft((List.empty[Value], 64)) {
+        ArrayValue((1 to count).foldLeft((List.empty[Value], 0)) {
           case ((acc, offset), _) =>
-            val (v, l) = decodeType(data, offset, t)
+            val (v, l) = decodeType(data.drop(64), offset, t)
             (v :: acc, offset + l)
         }._1.reverse)
     }
