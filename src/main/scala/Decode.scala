@@ -124,6 +124,10 @@ object Decode extends App {
         (SimpleValue(data.drop(dynOff * 2 + 64).take(len * 2)), 64)
       case SimpleType("uint256") =>
         (SimpleValue(BigInt(data.drop(offset).take(64), 16)), 64)
+      case TupleType(types) =>
+        val dynOff = BigInt(data.drop(offset).take(64), 16).toInt
+        //println("Offset: " + dynOff)
+        (TupleValue(decodeParams(data.drop(dynOff * 2), types)), 64)
       case ArrayType(tt) =>
         val dynOff = BigInt(data.drop(offset).take(64), 16).toInt
         //println("Offset: " + dynOff)
@@ -146,23 +150,11 @@ object Decode extends App {
     //println(data.take(64))
     val count = BigInt(data.take(64), 16).intValue
     //println("Count " + count)
-    t match {
-      case TupleType(types) =>
-        val offsets = (1 to count)
-          .map(i => BigInt(data.drop(64 * i).take(64), 16).toInt)
-          .toList
-        //offsets.foreach(println)
-        ArrayValue(offsets.map { offset =>
-          //println("DECODING " + types + " for " + data.drop(offset * 2).take(128))
-          TupleValue(decodeParams(data.drop(64 + offset * 2), types))
-        })
-      case _ =>
-        ArrayValue((1 to count).foldLeft((List.empty[Value], 0)) {
-          case ((acc, offset), _) =>
-            val (v, l) = decodeType(data.drop(64), offset, t)
-            (v :: acc, offset + l)
-        }._1.reverse)
-    }
+    ArrayValue((1 to count).foldLeft((List.empty[Value], 0)) {
+      case ((acc, offset), _) =>
+        val (v, l) = decodeType(data.drop(64), offset, t)
+        (v :: acc, offset + l)
+    }._1.reverse)
   }
 
   def getFirstSignature(
@@ -176,6 +168,7 @@ object Decode extends App {
                      hash: String
                    ): List[String] = {
     def fetch(): List[Signature] = {
+      require(hash.length == 8, "Invalid function hash")
       val f = httpClient.processFull(
         Gigahorse
           .url("https://www.4byte.directory/api/v1/signatures/")
