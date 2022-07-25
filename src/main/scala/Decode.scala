@@ -24,7 +24,7 @@ object Decode extends App {
   val signaturesFile = new File("signatures.dat")
 
   val cachedSignatures = mutable.Map.empty[String, List[String]]
-  
+
   def loadSignatures(): Unit = {
     if (signaturesFile.exists()) {
       cachedSignatures ++= Source
@@ -33,15 +33,17 @@ object Decode extends App {
         .toList
         .withFilter(_.nonEmpty)
         .map(_.split('|').toList)
-        .groupBy(_(0))
+        .groupBy(_ (0))
         .view
-        .mapValues(_.map(_(1)))
+        .mapValues(_.map(_ (1)))
         .toMap
     }
   }
+
   loadSignatures()
 
   case class Signature(id: Int, text_signature: String)
+
   implicit val readSignature = Json.reads[Signature]
 
   implicit val httpClient = Gigahorse.http(Gigahorse.config)
@@ -52,27 +54,48 @@ object Decode extends App {
     httpClient.close()
   }
 
-  sealed trait Value
+  sealed trait Value {
+    def format(level: Int): String
+  }
+
   case class SimpleValue(value: Any) extends Value {
-    override def toString = {
+    def format(level: Int) = {
       if (value.isInstanceOf[String]) {
         try {
-          decodeFunction(value.toString).toString
+          decodeFunction(value.toString).format(level)
         } catch {
-          case _ => value.toString
+          case e: Throwable =>
+            println(e.getMessage)
+            value.toString
         }
       } else value.toString
     }
+
+    override def toString = format(0)
   }
+
   case class TupleValue(values: List[Value]) extends Value {
-    override def toString = values.mkString("(", ", ", ")")
+    def format(level: Int) = values.map(_.format(level)).mkString("(", ", ", ")")
+
+    override def toString = format(0)
   }
+
   case class ArrayValue(values: List[Value]) extends Value {
-    override def toString = values.mkString("[\n  ", ",\n  ", "\n]")
+    def format(level: Int) = {
+      val p = Array.fill(level * 2)(" ").mkString
+      val e = Array.fill((level - 1) * 2)(" ").mkString
+      values.map(_.format(level)).mkString("[\n" + p, ",\n" + p, "\n" + e + "]")
+    }
+
+    override def toString = format(0)
   }
 
   case class Func(name: String, params: List[Value]) {
-    override def toString = name + params.mkString("(", ", ", ")")
+    def format(level: Int) = {
+      name + params.map(_.format(level + 1)).mkString("(", ", ", ")")
+    }
+
+    override def toString = format(0)
   }
 
   def decodeFunction(data: String): Func = {
@@ -99,8 +122,10 @@ object Decode extends App {
         //println("Offset = " + offset + " DynOff = " + dynOff + " LEN = " + len + " Start = " + data.take(64))
         //sys.exit()
         (SimpleValue(data.drop(dynOff * 2 + 64).take(len * 2)), 64)
+      case SimpleType("uint256") =>
+        (SimpleValue(BigInt(data.drop(offset).take(64), 16)), 64)
       case ArrayType(tt) =>
-        val dynOff = BigInt(data.drop(offset).take(64), 16).intValue
+        val dynOff = BigInt(data.drop(offset).take(64), 16).toInt
         //println("Offset: " + dynOff)
         (decodeArray(data.drop(dynOff * 2), tt), 64)
       case _ =>
@@ -131,21 +156,25 @@ object Decode extends App {
           //println("DECODING " + types + " for " + data.drop(offset * 2).take(128))
           TupleValue(decodeParams(data.drop(64 + offset * 2), types))
         })
-      case SimpleType(t) =>
-        sys.error("Unsupported array of simple types")
+      case _ =>
+        ArrayValue((1 to count).foldLeft((List.empty[Value], 64)) {
+          case ((acc, offset), _) =>
+            val (v, l) = decodeType(data, offset, t)
+            (v :: acc, offset + l)
+        }._1.reverse)
     }
   }
 
   def getFirstSignature(
-      hash: String
-  ): String = {
+                         hash: String
+                       ): String = {
     getSignatures(hash).headOption
       .getOrElse(sys.error("Missing signature: " + hash))
   }
 
   def getSignatures(
-      hash: String
-  ): List[String] = {
+                     hash: String
+                   ): List[String] = {
     def fetch(): List[Signature] = {
       val f = httpClient.processFull(
         Gigahorse
@@ -164,6 +193,7 @@ object Decode extends App {
         case _ => sys.error("Unexpected 4byte response: " + r.bodyAsString)
       }
     }
+
     cachedSignatures.getOrElseUpdate(
       hash, {
         val signatures = fetch().sortBy(_.id).map(_.text_signature)
