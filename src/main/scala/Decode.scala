@@ -134,6 +134,13 @@ object Decode extends App {
         val dynOff = BigInt(data.drop(offset).take(64), 16).toInt
         //println("Offset: " + dynOff)
         (decodeArray(data.drop(dynOff * 2), tt), 64)
+      case FixedLengthArrayType(t, size) =>
+        val (values, consumed) = (1 to size).foldLeft((List.empty[Value], 0)) {
+          case ((acc, offset), _) =>
+            val (v, l) = decodeType(data, offset, t)
+            (v :: acc, offset + l)
+        }
+        (ArrayValue(values.reverse), consumed)
       case _ =>
         sys.error("Unsupported type: " + t)
     }
