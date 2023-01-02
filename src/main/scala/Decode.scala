@@ -124,6 +124,10 @@ object Decode extends App {
         (SimpleValue(data.drop(dynOff * 2 + 64).take(len * 2)), 64)
       case SimpleType("bytes4") =>
         (SimpleValue(data.take(8)), 64)
+      case SimpleType("bytes32") =>
+        (SimpleValue(data.take(64)), 64)
+      case SimpleType("uint8") =>
+        (SimpleValue(BigInt(data.drop(offset).take(64), 16)), 64)
       case SimpleType("uint256") =>
         (SimpleValue(BigInt(data.drop(offset).take(64), 16)), 64)
       case TupleType(types) =>
